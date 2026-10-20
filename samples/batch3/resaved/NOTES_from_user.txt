@@ -1,0 +1,3 @@
+only 20 visible colors to choose from in the program
+orientation is correct
+open shapes stayed open in simulation

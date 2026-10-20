@@ -25,18 +25,35 @@ MODES = {"scan": 0, "cut": 1, "dot": 2}
 F_OUTPUT, F_SPEED, F_AIR, F_MODE, F_BIDIR, F_INTERVAL = 0x04, 0x08, 0x30, 0x124, 0x134, 0x135
 
 
+def header_shift(b):
+    """Bytes the header has grown/shrunk relative to the reference layout.
+    The header holds the text tool's defaults: pstring text at 0xFE, then 42 fixed
+    bytes, then pstring TrueType font (ref. length 8) and pstring SHX font (ref. 6)."""
+    t = b[0xFE]
+    fo = 0x129 + t
+    f = b[fo]
+    sh = b[fo + 1 + f]
+    return (t - 1) + (f - 8) + (sh - 6)
+
+
+BITMAP_SLOT = 256      # table record used for bitmap layers
+BITMAP_BLOCK = 4 + 475
+
+
 class Template:
     def __init__(self, empty_path, one_rect_path):
         e = open(empty_path, "rb").read()
         r = open(one_rect_path, "rb").read()
         assert e[1:16] == b"RDFILEVER8.0.01", "not an RDWorks V8 file"
-        self.sec = 0x449C3 + (e[0xFE] - 1)          # header holds a Pascal string at 0xFE
+        self.shift = header_shift(e)
+        self.table = TABLE_OFF + self.shift
+        self.sec = 0x449C3 + self.shift
         assert struct.unpack_from("<I", e, self.sec)[0] == 0, "template must be an empty project"
         self.prefix = bytearray(e[:self.sec])
         self.trailer = e[self.sec + 8:]
         assert len(self.trailer) == 48
         self.bed = struct.unpack_from("<2d", e, 0x14)
-        rsec = 0x449C3 + (r[0xFE] - 1)
+        rsec = 0x449C3 + header_shift(r)
         ob = rsec + 4 + GROUP + 4
         self.shape_head = r[ob:ob + 5]
         seg0 = ob + 53
@@ -49,8 +66,22 @@ class Template:
         self.curve_tag = b"\x19\x00\x0c\x62"      # constant in all curve samples so far
 
     def color(self, idx):
-        o = TABLE_OFF + idx * REC
+        o = self.table + idx * REC
         return bytes(self.prefix[o:o + 4])
+
+
+# Optional layer fields (offset from record start, kind). Names follow the RDWorks dialog.
+OPTIONAL_FIELDS = {
+    "power2_on":      (0x064, "b"),   # tick "2:" power row
+    "speed_default":  (0x068, "b"),   # "Default" next to speed
+    "power_default":  (0x06C, "b"),   # "Default" next to power
+    "seal":           (0x18C, "d"),   # Seal, mm
+    "close_delay":    (0x195, "d"),   # Close Delay, ms
+    "open_delay":     (0x19D, "d"),   # Open Delay, ms
+    "sew_comp":       (0x1A5, "b"),   # Advance… (seal) > Enable sew compensation
+    "through_mode":   (0x1B3, "b"),   # Laser through mode
+    "through_power1": (0x1B7, "d"),   # Through power 1, %
+}
 
 
 def _layer_patch(buf, o, L):
@@ -63,6 +94,12 @@ def _layer_patch(buf, o, L):
         buf[o + F_BIDIR] = 1 if L["bidir"] else 0
     if "interval" in L:
         struct.pack_into("<d", buf, o + F_INTERVAL, float(L["interval"]))
+    for key, (off, kind) in OPTIONAL_FIELDS.items():
+        if key in L:
+            if kind == "d":
+                struct.pack_into("<d", buf, o + off, float(L[key]))
+            else:
+                buf[o + off] = 1 if L[key] else 0
 
 
 def build(tpl, layers, shapes):
@@ -73,17 +110,28 @@ def build(tpl, layers, shapes):
       ('L', (x1, y1, x2, y2))  or  ('C', (x0, y0, x3, y3, cx1, cy1, cx2, cy2)),
     or (layer_pos, [points], closed) for a plain polyline."""
     buf = bytearray(tpl.prefix)
-    groups = []
+    groups, colors = [], []
     for L in layers:
-        o = TABLE_OFF + L["palette"] * REC
-        _layer_patch(buf, o, L)
-        groups.append(b"\0\0\0\0" + bytes(buf[o:o + GROUP - 4]))
+        if L.get("bitmap"):
+            o = tpl.table + BITMAP_SLOT * REC
+            _layer_patch(buf, o, dict(L, mode=L.get("mode", "scan")))
+            groups.append(b"\x01\x00\x01\x00" + bytes(buf[o:o + BITMAP_BLOCK - 4]))
+        else:
+            o = tpl.table + L["palette"] * REC
+            _layer_patch(buf, o, L)
+            groups.append(b"\0\0\0\0" + bytes(buf[o:o + GROUP - 4]))
+        colors.append(bytes(buf[o:o + 4]))
     out = buf
     out += struct.pack("<I", len(groups))
     for g in groups:
         out += g
     out += struct.pack("<I", len(shapes))
     for si, (lp, geom, closed) in enumerate(shapes):
+        if isinstance(geom, Bitmap):
+            out += b"\x02\x00\x02\x00\x00" + struct.pack("<I", si + 1) + colors[lp]
+            out += struct.pack("<4d", *geom.bbox) + geom.bmp
+            out += struct.pack("<2d", *geom.center) + b"\0\0\0\0"
+            continue
         if geom and isinstance(geom[0][0], str):
             segs = list(geom)
         else:
@@ -98,7 +146,7 @@ def build(tpl, layers, shapes):
             xs += v[0::2]; ys += v[1::2]
         out += tpl.shape_head
         out += struct.pack("<I", si + 1)          # shape sequence number (not a layer ref)
-        out += tpl.color(layers[lp]["palette"])
+        out += colors[lp]
         out += struct.pack("<4d", min(xs), max(xs), min(ys), max(ys))
         out += struct.pack("<II", 1 if closed else 0, len(segs))
         n = len(segs)
@@ -116,3 +164,31 @@ def build(tpl, layers, shapes):
         out += tpl.shape_tail
     out += tpl.trailer
     return bytes(out)
+
+
+class Bitmap:
+    """A bitmap object. `bmp` is a complete .bmp file (bytes); its pixels-per-metre
+    fields set the size on the bed. Place it by its centre (mm, y up)."""
+    def __init__(self, bmp, center):
+        self.bmp = bytes(bmp)
+        assert self.bmp[:2] == b"BM"
+        w, h = struct.unpack_from("<ii", self.bmp, 18)
+        ppm_x, ppm_y = struct.unpack_from("<ii", self.bmp, 38)
+        wmm, hmm = abs(w) / ppm_x * 1000, abs(h) / ppm_y * 1000
+        cx, cy = center
+        self.center = (cx, cy)
+        self.bbox = (cx - wmm / 2, cx + wmm / 2, cy - hmm / 2, cy + hmm / 2)
+
+    @classmethod
+    def from_image(cls, img, width_mm, center):
+        """Grayscale 8-bit .bmp from a PIL image, scaled by resolution (pixels kept)."""
+        import io
+        g = img.convert("L")
+        dpi = g.width / (width_mm / 25.4)
+        buf = io.BytesIO()
+        g.save(buf, format="BMP", dpi=(dpi, dpi))
+        b = bytearray(buf.getvalue())
+        ppm = round(g.width / width_mm * 1000)
+        struct.pack_into("<ii", b, 38, ppm, ppm)
+        struct.pack_into("<I", b, 50, 0)          # biClrImportant = 0, as RDWorks writes
+        return cls(b, center)
