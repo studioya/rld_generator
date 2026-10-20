@@ -19,8 +19,8 @@ Confidence tags:
 | Groups, text | observed: parsed fully, not written |
 | RDWorks accepts writer output | **confirmed**: 6 generated files opened and re-saved byte-identical (batch 3) |
 
-All 66 samples parse completely. 42 rebuild from their parsed contents: 33 byte-for-byte,
-9 differing only in bytes RDWorks fills with leftover memory, or in the last bit of a float.
+All 66 samples parse completely. 44 rebuild from their parsed contents: 33 byte-for-byte,
+11 differing only in bytes RDWorks fills with leftover memory, or in the last bit of a float.
 Run `python3 tests/test_roundtrip.py`.
 
 ## General

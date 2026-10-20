@@ -40,7 +40,7 @@ origin.
 
 - RDWorks V8.01.24 opens files from the writer, and re-saving them changes nothing
   (6 test files, including curves, open paths, 4 layers and 200 shapes).
-- All 66 samples parse completely. The writer rebuilds 42 of them byte-for-byte, apart
+- All 66 samples parse completely. The writer rebuilds 44 of them byte-for-byte, apart
   from bytes RDWorks fills with leftover memory.
 - Groups and text are parsed but not written. Text can be written as outlines.
 - Open questions are listed at the end of the spec.
