@@ -1,6 +1,6 @@
-# rld-re: RDWorks `.rld` project files, reverse-engineered
+# rld_generator: create RDWorks `.rld` files
 
-RDWorks is Ruida's free laser software. Its project format, `.rld`, has no public
+Reverse-engineering of RDWorks project files. RDWorks is Ruida's free laser software. Its project format, `.rld`, has no public
 specification. This repo documents the format and includes a Python writer that
 generates `.rld` projects with layers already set: speed, power, cut/scan/dot,
 output, air, scan interval and bidirectional.
