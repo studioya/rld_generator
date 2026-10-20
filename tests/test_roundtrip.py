@@ -61,6 +61,53 @@ def close_enough(a, b):
     return True
 
 
+def _floats_within_ulp(a, b):
+    """Every differing byte run lies inside a double that differs by at most 1 ulp."""
+    i, n = 0, len(a)
+    while i < n:
+        if a[i] != b[i]:
+            ok = False
+            for st in range(max(0, i - 7), i + 1):
+                if st + 8 <= n:
+                    x, y = struct.unpack_from("<q", a, st)[0], struct.unpack_from("<q", b, st)[0]
+                    if abs(x - y) <= 1 and a[st + 8:st + 9] == b[st + 8:st + 9]:
+                        ok = True; i = st + 8; break
+            if not ok: return False
+        else:
+            i += 1
+    return True
+
+
+def field_tests():
+    """Set one field on b00 with the writer; compare with the file RDWorks saved after
+    making the same change in its dialog."""
+    import rld_parse as P
+    base = glob.glob(S("batch2", "b00_*.rld"))[0]
+    tpl = W.Template(S("batch1", "t1.rld"), base)
+    b00 = open(base, "rb").read()
+    cases = {"c01": dict(seal=0.123), "c02": dict(open_delay=4.5), "c03": dict(close_delay=6.5),
+             "c04": dict(through_mode=False), "c05": dict(through_power1=7.7),
+             "c06": dict(power2_on=True, min2=11.5, max2=12.5), "c07": dict(speed_default=True),
+             "c08": dict(power_default=True), "c09": dict(sew_comp=True),
+             "b06": dict(mode="scan"), "b07": dict(mode="scan", interval=0.05),
+             "b08": dict(mode="scan", bidir=False), "b10": dict(mode="dot"),
+             "b11": dict(output=False), "b12": dict(air=False)}
+    t = copy.copy(tpl); t.prefix = bytearray(b00[:0x449C3])
+    _, _, objs, _ = P.parse(b00)
+    fails = 0
+    for name, change in cases.items():
+        target = open(glob.glob(S("batch*", name + "_*.rld"))[0] if glob.glob(S("batch*", name + "_*.rld"))
+                      else glob.glob(S("batch3", "saved", name + "_*.rld"))[0], "rb").read()
+        L = dict(palette=0, speed=100, min=15, max=20, mode="cut")
+        L.update(change)
+        out = W.build(t, [L], [(0, objs[0]["segs"], True)])
+        exact = out == target
+        ok = exact or (len(out) == len(target) and _floats_within_ulp(out, target))
+        fails += not ok
+        print(f"field {name} {change}: {'exact' if exact else 'ok (last float bit)' if ok else 'MISMATCH'}")
+    return fails
+
+
 if __name__ == "__main__":
     tpl = W.Template(S("batch1", "t1.rld"), glob.glob(S("batch2", "b00_*.rld"))[0])
     fails = 0
@@ -82,5 +129,6 @@ if __name__ == "__main__":
         same = open(g, "rb").read() == open(r, "rb").read()
         fails += not same
         print(f"RDWorks re-save {os.path.basename(g)[:3]}: {'identical' if same else 'CHANGED'}")
+    fails += field_tests()
     print("FAIL" if fails else "PASS")
     sys.exit(1 if fails else 0)

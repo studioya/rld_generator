@@ -31,7 +31,7 @@ def layer_fields(r):
                 max=d(r, 0x18)[0], min2=d(r, 0x20)[0], max2=d(r, 0x28)[0], air=r[0x30],
                 power2_on=r[0x64], speed_default=r[0x68], power_default=r[0x6C],
                 mode=MODES.get(r[0x124], r[0x124]), bidir=r[0x134], interval=d(r, 0x135)[0],
-                seal=d(r, 0x18C)[0], close_delay=d(r, 0x195)[0], open_delay=d(r, 0x19D)[0],
+                seal=d(r, 0x18D)[0], close_delay=d(r, 0x195)[0], open_delay=d(r, 0x19D)[0],
                 sew_comp=r[0x1A5], through_mode=r[0x1B3], through_power1=d(r, 0x1B7)[0])
 
 

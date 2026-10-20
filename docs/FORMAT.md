@@ -118,7 +118,7 @@ RDWorks Layer Parameter dialog (`docs/img/layer_parameter_dialog.png`).
 | `+0x124` | byte | Processing Mode: 0 scan / 1 cut / 2 dot | b06, b10 |
 | `+0x134` | byte | Scan: 1 bidirectional ("x swing") / 0 one-way | b08 |
 | `+0x135` | double | Scan interval (mm) | b07 |
-| `+0x18C` | double | Seal (mm) | c01 |
+| `+0x18D` | double | Seal (mm) | c01 |
 | `+0x195` | double | Close Delay (ms) | c03 |
 | `+0x19D` | double | Open Delay (ms) | c02 |
 | `+0x1A5` | byte | Advance… (next to Seal) → Enable sew compensation | c09 |
@@ -237,8 +237,8 @@ A flag byte before the font name is `01` when the SHX font is selected (b33). [o
 
 ## Open questions
 
-1. Remaining layer fields: sew width, through power 2–6, power 3–6, "Other layer
-   parameters" dialog, cut/scan "Advance…" fields.
+1. Remaining layer fields: sew width and the "Other layer
+   parameters" dialog. (Power rows 2–6 and through power 2–6 are out of scope: they apply to multi-tube machines.)
 2. Bitmap layers on colors other than black. Is slot 256 the only bitmap slot?
 3. Bitmap processing settings: brightness, contrast, dither, output resolution.
 4. The 188-byte path trailer and the region between the layer table and `N`.

@@ -75,7 +75,7 @@ OPTIONAL_FIELDS = {
     "power2_on":      (0x064, "b"),   # tick "2:" power row
     "speed_default":  (0x068, "b"),   # "Default" next to speed
     "power_default":  (0x06C, "b"),   # "Default" next to power
-    "seal":           (0x18C, "d"),   # Seal, mm
+    "seal":           (0x18D, "d"),   # Seal, mm
     "close_delay":    (0x195, "d"),   # Close Delay, ms
     "open_delay":     (0x19D, "d"),   # Open Delay, ms
     "sew_comp":       (0x1A5, "b"),   # Advance… (seal) > Enable sew compensation
